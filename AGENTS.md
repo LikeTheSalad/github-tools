@@ -135,6 +135,36 @@ Tags are always `v{major}.{minor}.{patch}`. The version scripts grep for
 
 ---
 
+## Setting up a new consumer repo
+
+`scripts/setup-consumer.py` creates or updates a consumer repo's github-tools integration.
+
+```
+python3 scripts/setup-consumer.py <path-to-consumer-repo>
+```
+
+What it automates:
+- Thin-wrapper workflow files for every reusable workflow in this repo (`.github/workflows/`)
+- `.github/renovate.json` with auto-merge settings (merges into existing config, doesn't replace)
+- `CHANGELOG.md` `<!-- CHANGELOG_INSERT -->` marker (if the file exists)
+
+**Idempotent and maintenance-aware:** safe to re-run on already-configured repos. When workflow
+inputs change in this repo, re-running the script on a consumer:
+- Adds newly-required inputs (with conventional value or `<TODO: set …>` placeholder)
+- Removes inputs deleted from the schema
+- Preserves all existing user-configured input values unchanged
+- Normalizes file structure to the current template on first run; subsequent runs are no-ops
+
+After the script runs, run `validate-consumer.py` to confirm the result.
+
+The script prints a "Manual steps required" notice at the end covering things it cannot automate
+(GitHub App setup, secrets, branch protection — see README.md for details).
+
+**If the wrapper trigger conventions change** (e.g. the `on:` block in `WRAPPER_TEMPLATES` or the
+job name for a workflow), update the `WRAPPER_TEMPLATES` dict in `setup-consumer.py` and this file.
+
+---
+
 ## Validating consumer repos
 
 `scripts/validate-consumer.py` checks that a consumer repo's thin-wrapper workflows are correct.
