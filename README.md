@@ -20,6 +20,7 @@ Call from a consuming repo's workflow with `uses: LikeTheSalad/github-tools/.git
 Wrapper files can be regenerated with `python3 scripts/setup-consumer.py <path-to-consumer-repo>`.
 The script derives required inputs and explicit secret mappings directly from the reusable workflow
 schema in this repo, so input/secret changes in existing workflows do not require script updates.
+Optional secrets may be emitted as commented-out suggestions in generated wrappers.
 
 #### `pr-check.yml`
 

@@ -151,6 +151,7 @@ def workflow_call_inputs(reusable_path: Path) -> dict:
 def workflow_call_secrets(reusable_path: Path) -> dict:
     return workflow_call_block(reusable_path).get("secrets") or {}
 
+
 def extract_existing_job(wrapper_file: Path) -> Optional[dict]:
     """
     Returns the first github-tools job in the given file, or None if absent.
@@ -217,21 +218,56 @@ def compute_with_block(workflow_filename: str, existing_with: Optional[dict]) ->
     return result
 
 
-def compute_secrets_block(workflow_filename: str, existing_secrets: Optional[dict]) -> dict:
+def default_secret_mapping(secret_name: str) -> str:
+    return f"${{{{ secrets.{secret_name} }}}}"
+
+
+def release_publish_active_optional_secrets(existing_with: Optional[dict]) -> set[str]:
+    existing_with = existing_with or {}
+    publish_maven = existing_with.get("publish-to-maven-central") is True
+    publish_gradle = existing_with.get("publish-to-gradle-portal") is True
+
+    active = set()
+    if publish_maven:
+        active.update({"MAVEN_CENTRAL_USERNAME", "MAVEN_CENTRAL_PASSWORD"})
+    if publish_gradle:
+        active.update({"GRADLE_PUBLISH_KEY", "GRADLE_PUBLISH_SECRET"})
+    if publish_maven or publish_gradle:
+        active.update({"GPG_PRIVATE_KEY", "GPG_PASSWORD"})
+    return active
+
+
+def compute_secrets_blocks(
+    workflow_filename: str,
+    existing_with: Optional[dict],
+    existing_secrets: Optional[dict],
+) -> tuple[dict, list[tuple[str, str]]]:
     reusable_path = REUSABLE_WORKFLOWS_DIR / workflow_filename
     schema = workflow_call_secrets(reusable_path)
     existing_secrets = existing_secrets or {}
 
-    result = {}
+    active = {}
+    commented = []
+    active_optional = set()
+    if workflow_filename == "release-publish.yml":
+        active_optional = release_publish_active_optional_secrets(existing_with)
+
     for secret_name, defn in schema.items():
         if not isinstance(defn, dict):
             continue
         if secret_name in existing_secrets:
-            result[secret_name] = existing_secrets[secret_name]
+            if defn.get("required") or secret_name in active_optional:
+                active[secret_name] = existing_secrets[secret_name]
+            else:
+                commented.append((secret_name, default_secret_mapping(secret_name)))
+        elif defn.get("required"):
+            active[secret_name] = default_secret_mapping(secret_name)
+        elif secret_name in active_optional:
+            active[secret_name] = default_secret_mapping(secret_name)
         else:
-            result[secret_name] = f"${{{{ secrets.{secret_name} }}}}"
+            commented.append((secret_name, default_secret_mapping(secret_name)))
 
-    return result
+    return active, commented
 
 
 # ── YAML value formatting ─────────────────────────────────────────────────────
@@ -258,12 +294,14 @@ def format_with_section(with_dict: dict) -> str:
         lines.append(f"      {key}: {format_yaml_value(value)}\n")
     return "".join(lines)
 
-def format_secrets_section(secrets_dict: dict) -> str:
-    if not secrets_dict:
+def format_secrets_section(secrets_dict: dict, commented_secrets: list[tuple[str, str]]) -> str:
+    if not secrets_dict and not commented_secrets:
         return ""
     lines = ["    secrets:\n"]
     for key, value in secrets_dict.items():
         lines.append(f"      {key}: {format_yaml_value(value)}\n")
+    for key, value in commented_secrets:
+        lines.append(f"      # {key}: {value}\n")
     return "".join(lines)
 
 
@@ -275,10 +313,12 @@ def generate_wrapper(
     """Returns the full YAML content for a wrapper workflow file."""
     template = WRAPPER_TEMPLATES[workflow_filename]
     with_dict = compute_with_block(workflow_filename, existing_with)
-    secrets_dict = compute_secrets_block(workflow_filename, existing_secrets)
+    secrets_dict, commented_secrets = compute_secrets_blocks(
+        workflow_filename, existing_with, existing_secrets
+    )
     return template.format(
         with_section=format_with_section(with_dict),
-        secrets_section=format_secrets_section(secrets_dict),
+        secrets_section=format_secrets_section(secrets_dict, commented_secrets),
     )
 
 
@@ -328,7 +368,9 @@ def setup_workflow(
         old_keys = set(existing_with)
         new_keys = set(compute_with_block(workflow_filename, existing_with))
         old_secret_keys = set(existing_secrets or {})
-        new_secret_keys = set(compute_secrets_block(workflow_filename, existing_secrets))
+        new_secret_keys = set(
+            compute_secrets_blocks(workflow_filename, existing_with, existing_secrets)[0]
+        )
         added = sorted(new_keys - old_keys)
         removed = sorted(old_keys - new_keys)
         added_secrets = sorted(new_secret_keys - old_secret_keys)

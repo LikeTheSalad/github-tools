@@ -192,6 +192,8 @@ inputs change in this repo, re-running the script on a consumer:
 - Preserves all existing user-configured input values unchanged
 - Regenerates explicit `secrets:` mappings directly from each reusable workflow's
   declared `on.workflow_call.secrets`
+- Keeps required secrets active and may render optional secrets as commented-out
+  suggestions in generated wrappers when they are not currently enabled for that repo
 - Normalizes file structure to the current template on first run; subsequent runs are no-ops
 
 After the script runs, run `validate-consumer.py` to confirm the result.
