@@ -1,0 +1,25 @@
+name: Generate changelog
+description: >
+  Generates a changelog section from merged PRs since the last release tag
+  and inserts it into CHANGELOG.md after the <!-- CHANGELOG_INSERT --> marker.
+inputs:
+  version:
+    description: The new version string, e.g. "3.2.0"
+    required: true
+  token:
+    description: GitHub token for gh CLI calls
+    required: true
+  changelog-file:
+    description: Path to the changelog file
+    default: CHANGELOG.md
+runs:
+  using: composite
+  steps:
+    - name: Generate changelog
+      shell: sh
+      env:
+        VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        CHANGELOG_FILE: ${{ inputs.changelog-file }}
+      run: sh $GITHUB_ACTION_PATH/generate-changelog.sh

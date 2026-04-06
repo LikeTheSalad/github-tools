@@ -1,0 +1,14 @@
+name: Set up JDK
+description: Installs the JDK for all workflows. Change java-version here to update it across every workflow that uses this action.
+inputs:
+  java-version:
+    description: JDK version to install (Temurin distribution)
+    default: '21'
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK ${{ inputs.java-version }}
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: temurin

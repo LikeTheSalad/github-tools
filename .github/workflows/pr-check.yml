@@ -1,0 +1,87 @@
+name: PR Check
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: JDK version to use
+        type: string
+        default: '21'
+      checks-command:
+        description: Command to run the project's verification suite
+        type: string
+        default: './gradlew check'
+      run-on-windows:
+        description: Whether to also run checks on windows-latest
+        type: boolean
+        default: false
+      run-instrumentation-tests:
+        description: Whether to run Android instrumentation tests on an emulator
+        type: boolean
+        default: false
+      instrumentation-test-command:
+        description: Command to run instrumentation tests
+        type: string
+        default: './gradlew connectedDebugAndroidTest'
+      instrumentation-api-level:
+        description: Android API level for the emulator
+        type: number
+        default: 35
+
+jobs:
+  build:
+    name: Gradle check
+    strategy:
+      matrix:
+        os: ${{ fromJson(inputs.run-on-windows && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: LikeTheSalad/github-tools/.github/actions/setup-java@main
+        with:
+          java-version: ${{ inputs.java-version }}
+      - name: Run checks
+        run: ${{ inputs.checks-command }}
+      - name: Store build report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-reports
+          path: |
+            **/build/reports/
+            **/build/test-results/
+
+  instrumentation:
+    name: Instrumentation tests
+    runs-on: ubuntu-latest
+    if: inputs.run-instrumentation-tests
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: LikeTheSalad/github-tools/.github/actions/setup-java@main
+        with:
+          java-version: ${{ inputs.java-version }}
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ inputs.instrumentation-api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel
+          script: ${{ inputs.instrumentation-test-command }}
+      - name: Store build report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: instrumentation-reports
+          path: |
+            **/build/reports/
+            **/build/test-results/

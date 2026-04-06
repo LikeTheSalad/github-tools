@@ -1,0 +1,100 @@
+name: Release — Publish
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: JDK version to use
+        type: string
+        default: '21'
+      app-id:
+        description: GitHub App ID for the bot account
+        type: string
+        required: true
+      publish-to-maven-central:
+        description: Whether to publish to Maven Central
+        type: boolean
+        default: false
+      publish-to-gradle-portal:
+        description: Whether to publish to the Gradle Plugin Portal
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    # Only run when a pre-release/* PR is merged into a release/* branch
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'pre-release/')
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: LikeTheSalad/github-tools/.github/actions/setup-bot-git-user@main
+        id: bot
+        with:
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.GH_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.bot.outputs.token }}
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+
+      - uses: LikeTheSalad/github-tools/.github/actions/setup-java@main
+        with:
+          java-version: ${{ inputs.java-version }}
+
+      - name: Read release version
+        id: vars
+        run: |
+          version=$(sed -n 's/^version=//p' gradle.properties)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - uses: LikeTheSalad/github-tools/.github/actions/publish-maven-central@main
+        if: inputs.publish-to-maven-central
+        with:
+          maven-central-username: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          maven-central-password: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-password: ${{ secrets.GPG_PASSWORD }}
+
+      - uses: LikeTheSalad/github-tools/.github/actions/publish-gradle-portal@main
+        if: inputs.publish-to-gradle-portal
+        with:
+          gradle-publish-key: ${{ secrets.GRADLE_PUBLISH_KEY }}
+          gradle-publish-secret: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-password: ${{ secrets.GPG_PASSWORD }}
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          notes=$(sed '0,/^## Version /d; /^## Version /,$d' CHANGELOG.md)
+          git tag ${{ steps.vars.outputs.tag }}
+          git push origin ${{ steps.vars.outputs.tag }}
+          gh release create ${{ steps.vars.outputs.tag }} \
+            --target ${{ github.event.pull_request.base.ref }} \
+            --title "${{ steps.vars.outputs.version }}" \
+            --notes "$notes"
+
+      - name: Open PR to main
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          pr_url=$(gh pr create \
+            --title "Release ${{ steps.vars.outputs.version }}" \
+            --body "Release ${{ steps.vars.outputs.version }}." \
+            --base main \
+            --head ${{ github.event.pull_request.base.ref }})
+          gh pr merge "$pr_url" --auto --merge
