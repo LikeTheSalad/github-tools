@@ -26,6 +26,10 @@ on:
         description: Path to the changelog file
         type: string
         default: CHANGELOG.md
+    secrets:
+      GH_BOT_PRIVATE_KEY:
+        description: GitHub App private key for release branch and PR automation
+        required: true
 
 jobs:
   check:

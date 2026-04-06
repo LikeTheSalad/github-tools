@@ -10,8 +10,8 @@ Shared GitHub Actions reusable workflows and composite actions for Gradle/Androi
 ## Usage
 
 Each project references components from this repo directly at `@main` — no releases required.
-All workflows pass secrets with `secrets: inherit`, so no secret names need to be repeated in
-the thin wrapper files.
+Consumer wrappers map only the secrets each reusable workflow needs; they do not use
+`secrets: inherit`.
 
 ### Reusable workflows
 
@@ -48,7 +48,8 @@ jobs:
       checks-command: ./checks.sh
       run-instrumentation-tests: true
       instrumentation-test-command: ./gradlew -p demo-app connectedDebugAndroidTest
-    secrets: inherit
+    secrets:
+      GH_BOT_PRIVATE_KEY: ${{ secrets.GH_BOT_PRIVATE_KEY }}
 ```
 
 ---
@@ -76,7 +77,8 @@ jobs:
     uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
     with:
       app-id: ${{ vars.APP_ID }}
-    secrets: inherit
+    secrets:
+      GH_BOT_PRIVATE_KEY: ${{ secrets.GH_BOT_PRIVATE_KEY }}
 ```
 
 ---
@@ -121,7 +123,8 @@ jobs:
       app-id: ${{ vars.APP_ID }}
       version-override: ${{ inputs.version_override || '' }}
       readme-version-sed: 's/version "[0-9]\+\.[0-9]\+\.[0-9]\+"/version "{version}"/g'
-    secrets: inherit
+    secrets:
+      GH_BOT_PRIVATE_KEY: ${{ secrets.GH_BOT_PRIVATE_KEY }}
 ```
 
 ---
@@ -157,7 +160,14 @@ jobs:
       app-id: ${{ vars.APP_ID }}
       publish-to-maven-central: true
       publish-to-gradle-portal: true
-    secrets: inherit
+    secrets:
+      GH_BOT_PRIVATE_KEY: ${{ secrets.GH_BOT_PRIVATE_KEY }}
+      MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+      GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
+      GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSWORD: ${{ secrets.GPG_PASSWORD }}
 ```
 
 ---

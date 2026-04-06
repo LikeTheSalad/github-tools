@@ -50,7 +50,7 @@ consumer repo setup or validation.
 
 | Script | When to use |
 |--------|-------------|
-| `python3 scripts/validate-consumer.py <path>` | Check that a consumer repo's wrapper files are correct and up to date with this repo's current inputs |
+| `python3 scripts/validate-consumer.py <path>` | Check that a consumer repo's wrapper files are correct and up to date with this repo's current inputs and explicit secret mappings |
 | `python3 scripts/setup-consumer.py <path>` | Create or update a consumer repo's wrapper files, `renovate.json`, and `CHANGELOG.md` marker |
 
 **Typical workflow** when asked to set up or fix a consumer repo:
@@ -214,9 +214,11 @@ python3 scripts/validate-consumer.py <path-to-consumer-repo>
 What it checks:
 - `uses:` path references an existing workflow in this repo and is pinned to `@main`
 - All required inputs (those marked `required: true` with no `default`) are present
+- All required secrets declared under `on.workflow_call.secrets` are mapped explicitly
 - No inputs are passed that aren't defined in the reusable workflow
+- No secrets are mapped that aren't defined in the reusable workflow
 - Boolean/number inputs have the right YAML type (unquoted), unless the value is a `${{ }}` expression
-- `secrets: inherit` is present on every github-tools job
+- `secrets: inherit` is not used on github-tools jobs; wrappers must map secrets explicitly
 
 It warns (without failing) if a `pr-check` caller job is not named `checks`, since branch
 protection in consuming repos is registered against that name.

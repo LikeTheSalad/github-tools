@@ -31,6 +31,10 @@ on:
         description: Android API level for the emulator
         type: number
         default: 35
+    secrets:
+      GH_BOT_PRIVATE_KEY:
+        description: GitHub App private key for the wrapper sync check job
+        required: true
 
 jobs:
   sync-check:
@@ -38,7 +42,8 @@ jobs:
     uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
     with:
       app-id: ${{ inputs.app-id }}
-    secrets: inherit
+    secrets:
+      GH_BOT_PRIVATE_KEY: ${{ secrets.GH_BOT_PRIVATE_KEY }}
 
   build:
     name: Gradle check

@@ -7,6 +7,10 @@ on:
         description: GitHub App ID for the bot account
         type: string
         required: true
+    secrets:
+      GH_BOT_PRIVATE_KEY:
+        description: GitHub App private key for branch updates and PR creation
+        required: true
 
 jobs:
   sync:
@@ -16,15 +20,16 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
       - uses: LikeTheSalad/github-tools/.github/actions/setup-bot-git-user@main
         id: bot
         with:
           app-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.GH_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.bot.outputs.token }}
+          fetch-depth: 0
 
       - uses: actions/checkout@v6
         with:
@@ -47,7 +52,6 @@ jobs:
         if: steps.validate.outputs.in_sync == 'false'
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
-          BOT_TOKEN: ${{ steps.bot.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -75,7 +79,7 @@ jobs:
           fi
 
           git commit -m "chore: sync github-tools wrapper files"
-          git push "https://x-access-token:${BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch" --force
+          git push origin "$branch" --force
 
           {
             echo "Wrapper files have drifted from the current version of github-tools."

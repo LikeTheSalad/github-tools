@@ -62,7 +62,7 @@ on:
 jobs:
   checks:
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
-{with_section}    secrets: inherit
+{with_section}{secrets_section}
 """,
     "sync-wrappers.yml": """\
 name: Sync github-tools wrappers
@@ -71,7 +71,7 @@ on:
 jobs:
   sync:
     uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
-{with_section}    secrets: inherit
+{with_section}{secrets_section}
 """,
     "release-prepare.yml": """\
 name: Release — Prepare
@@ -88,7 +88,7 @@ on:
 jobs:
   release:
     uses: LikeTheSalad/github-tools/.github/workflows/release-prepare.yml@main
-{with_section}    secrets: inherit
+{with_section}{secrets_section}
 """,
     "release-publish.yml": """\
 name: Release — Publish
@@ -100,7 +100,7 @@ on:
 jobs:
   release:
     uses: LikeTheSalad/github-tools/.github/workflows/release-publish.yml@main
-{with_section}    secrets: inherit
+{with_section}{secrets_section}
 """,
 }
 
@@ -125,7 +125,6 @@ CONVENTIONAL_INPUTS: dict[str, dict[str, str]] = {
     },
 }
 
-
 # ── YAML helpers ──────────────────────────────────────────────────────────────
 
 def load_yaml(path: Path) -> dict:
@@ -133,23 +132,28 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def workflow_call_inputs(reusable_path: Path) -> dict:
+def workflow_call_block(reusable_path: Path) -> dict:
     """
-    Returns the workflow_call inputs block from a reusable workflow.
+    Returns the workflow_call block from a reusable workflow.
     Handles PyYAML's YAML 1.1 quirk where `on:` is parsed as boolean True.
     """
     data = load_yaml(reusable_path)
     on_block = data.get("on") or data.get(True) or {}
     if not isinstance(on_block, dict):
         return {}
-    wc = on_block.get("workflow_call") or {}
-    return wc.get("inputs") or {}
+    return on_block.get("workflow_call") or {}
 
 
-def extract_existing_with(wrapper_file: Path) -> Optional[dict]:
+def workflow_call_inputs(reusable_path: Path) -> dict:
+    return workflow_call_block(reusable_path).get("inputs") or {}
+
+
+def workflow_call_secrets(reusable_path: Path) -> dict:
+    return workflow_call_block(reusable_path).get("secrets") or {}
+
+def extract_existing_job(wrapper_file: Path) -> Optional[dict]:
     """
-    Returns the `with` block of the first github-tools job in the given file,
-    or None if the file has no such job.
+    Returns the first github-tools job in the given file, or None if absent.
     """
     try:
         data = load_yaml(wrapper_file)
@@ -159,8 +163,23 @@ def extract_existing_with(wrapper_file: Path) -> Optional[dict]:
         if not isinstance(job, dict):
             continue
         if isinstance(job.get("uses"), str) and job["uses"].startswith(USES_PREFIX):
-            return dict(job.get("with") or {})
+            return job
     return None
+
+
+def extract_existing_with(wrapper_file: Path) -> Optional[dict]:
+    job = extract_existing_job(wrapper_file)
+    if job is None:
+        return None
+    return dict(job.get("with") or {})
+
+
+def extract_existing_secrets(wrapper_file: Path) -> Optional[dict]:
+    job = extract_existing_job(wrapper_file)
+    if job is None:
+        return None
+    secrets = job.get("secrets")
+    return dict(secrets) if isinstance(secrets, dict) else {}
 
 
 # ── `with` block computation ──────────────────────────────────────────────────
@@ -198,6 +217,23 @@ def compute_with_block(workflow_filename: str, existing_with: Optional[dict]) ->
     return result
 
 
+def compute_secrets_block(workflow_filename: str, existing_secrets: Optional[dict]) -> dict:
+    reusable_path = REUSABLE_WORKFLOWS_DIR / workflow_filename
+    schema = workflow_call_secrets(reusable_path)
+    existing_secrets = existing_secrets or {}
+
+    result = {}
+    for secret_name, defn in schema.items():
+        if not isinstance(defn, dict):
+            continue
+        if secret_name in existing_secrets:
+            result[secret_name] = existing_secrets[secret_name]
+        else:
+            result[secret_name] = f"${{{{ secrets.{secret_name} }}}}"
+
+    return result
+
+
 # ── YAML value formatting ─────────────────────────────────────────────────────
 
 def format_yaml_value(value: Any) -> str:
@@ -222,12 +258,28 @@ def format_with_section(with_dict: dict) -> str:
         lines.append(f"      {key}: {format_yaml_value(value)}\n")
     return "".join(lines)
 
+def format_secrets_section(secrets_dict: dict) -> str:
+    if not secrets_dict:
+        return ""
+    lines = ["    secrets:\n"]
+    for key, value in secrets_dict.items():
+        lines.append(f"      {key}: {format_yaml_value(value)}\n")
+    return "".join(lines)
 
-def generate_wrapper(workflow_filename: str, existing_with: Optional[dict]) -> str:
+
+def generate_wrapper(
+    workflow_filename: str,
+    existing_with: Optional[dict],
+    existing_secrets: Optional[dict],
+) -> str:
     """Returns the full YAML content for a wrapper workflow file."""
     template = WRAPPER_TEMPLATES[workflow_filename]
     with_dict = compute_with_block(workflow_filename, existing_with)
-    return template.format(with_section=format_with_section(with_dict))
+    secrets_dict = compute_secrets_block(workflow_filename, existing_secrets)
+    return template.format(
+        with_section=format_with_section(with_dict),
+        secrets_section=format_secrets_section(secrets_dict),
+    )
 
 
 # ── Setup tasks ───────────────────────────────────────────────────────────────
@@ -243,15 +295,18 @@ def setup_workflow(
 
     if target.exists():
         existing_with = extract_existing_with(target)
+        existing_secrets = extract_existing_secrets(target)
         migrating = False
     elif legacy.exists():
         existing_with = extract_existing_with(legacy)
+        existing_secrets = extract_existing_secrets(legacy)
         migrating = True
     else:
         existing_with = None
+        existing_secrets = None
         migrating = False
 
-    new_content = generate_wrapper(workflow_filename, existing_with)
+    new_content = generate_wrapper(workflow_filename, existing_with, existing_secrets)
 
     if target.exists() and target.read_text() == new_content:
         if legacy.exists():
@@ -272,14 +327,22 @@ def setup_workflow(
     elif existing_with is not None:
         old_keys = set(existing_with)
         new_keys = set(compute_with_block(workflow_filename, existing_with))
+        old_secret_keys = set(existing_secrets or {})
+        new_secret_keys = set(compute_secrets_block(workflow_filename, existing_secrets))
         added = sorted(new_keys - old_keys)
         removed = sorted(old_keys - new_keys)
-        if added or removed:
+        added_secrets = sorted(new_secret_keys - old_secret_keys)
+        removed_secrets = sorted(old_secret_keys - new_secret_keys)
+        if added or removed or added_secrets or removed_secrets:
             parts = []
             if added:
                 parts.append(f"added input(s): {', '.join(added)}")
             if removed:
                 parts.append(f"removed input(s): {', '.join(removed)}")
+            if added_secrets:
+                parts.append(f"added secret(s): {', '.join(added_secrets)}")
+            if removed_secrets:
+                parts.append(f"removed secret(s): {', '.join(removed_secrets)}")
             detail = "; ".join(parts)
         else:
             detail = "reformatted"

@@ -19,6 +19,28 @@ on:
         description: Whether to publish to the Gradle Plugin Portal
         type: boolean
         default: false
+    secrets:
+      GH_BOT_PRIVATE_KEY:
+        description: GitHub App private key for release tagging and PR automation
+        required: true
+      MAVEN_CENTRAL_USERNAME:
+        description: Maven Central username/token
+        required: false
+      MAVEN_CENTRAL_PASSWORD:
+        description: Maven Central password/token
+        required: false
+      GRADLE_PUBLISH_KEY:
+        description: Gradle Plugin Portal API key
+        required: false
+      GRADLE_PUBLISH_SECRET:
+        description: Gradle Plugin Portal API secret
+        required: false
+      GPG_PRIVATE_KEY:
+        description: Armored GPG private key for artifact signing
+        required: false
+      GPG_PASSWORD:
+        description: GPG key passphrase
+        required: false
 
 jobs:
   publish:

@@ -43,11 +43,9 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def workflow_call_inputs(reusable_path: Path) -> dict:
+def workflow_call_block(reusable_path: Path) -> dict:
     """
-    Returns the workflow_call inputs block from a reusable workflow, e.g.:
-        { "app-id": { "type": "string", "required": True }, ... }
-    Returns {} if the file has no workflow_call inputs.
+    Returns the workflow_call block from a reusable workflow.
 
     Note: PyYAML (YAML 1.1) parses the bare key `on:` as the boolean True,
     so we check for both "on" and True when looking up that key.
@@ -57,8 +55,15 @@ def workflow_call_inputs(reusable_path: Path) -> dict:
     on_block = data.get("on") or data.get(True) or {}
     if not isinstance(on_block, dict):
         return {}
-    wc = on_block.get("workflow_call") or {}
-    return wc.get("inputs") or {}
+    return on_block.get("workflow_call") or {}
+
+
+def workflow_call_inputs(reusable_path: Path) -> dict:
+    return workflow_call_block(reusable_path).get("inputs") or {}
+
+
+def workflow_call_secrets(reusable_path: Path) -> dict:
+    return workflow_call_block(reusable_path).get("secrets") or {}
 
 
 def github_tools_jobs(consumer_data: dict) -> list[tuple[str, dict, str]]:
@@ -121,11 +126,25 @@ def validate_job(
         return
 
     schema = workflow_call_inputs(reusable_path)
+    secrets_schema = workflow_call_secrets(reusable_path)
     consumer_with: dict = job.get("with") or {}
+    consumer_secrets = job.get("secrets")
 
-    # ── secrets: inherit ────────────────────────────────────────────────────
-    if job.get("secrets") != "inherit":
-        result.error(ctx, "'secrets: inherit' is required")
+    # ── Explicit secrets mapping ────────────────────────────────────────────
+    if not isinstance(consumer_secrets, dict):
+        result.error(ctx, "Explicit 'secrets:' mapping is required; 'secrets: inherit' is not allowed")
+        consumer_secrets = {}
+
+    for name, defn in secrets_schema.items():
+        if isinstance(defn, dict) and defn.get("required") and name not in consumer_secrets:
+            result.error(ctx, f"Missing required secret '{name}'")
+
+    for name in consumer_secrets:
+        if name not in secrets_schema:
+            result.error(
+                ctx,
+                f"Unknown secret '{name}' — not defined in {workflow_filename}",
+            )
 
     # ── Required inputs must be present ─────────────────────────────────────
     for name, defn in schema.items():
