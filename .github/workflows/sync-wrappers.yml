@@ -1,0 +1,102 @@
+name: Sync Wrappers
+
+on:
+  workflow_call:
+    inputs:
+      app-id:
+        description: GitHub App ID for the bot account
+        type: string
+        required: true
+
+jobs:
+  sync:
+    name: Sync wrapper files
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: LikeTheSalad/github-tools/.github/actions/setup-bot-git-user@main
+        id: bot
+        with:
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.GH_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          repository: LikeTheSalad/github-tools
+          path: .github-tools
+
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
+
+      - name: Validate wrappers
+        id: validate
+        run: |
+          if python3 .github-tools/scripts/validate-consumer.py . 2>&1 | tee /tmp/validate-output.txt; then
+            echo "in_sync=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "in_sync=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply updates and open PR
+        if: steps.validate.outputs.in_sync == 'false'
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          BOT_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          branch="github-tools/auto-update"
+          open_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+
+          if [ -n "$open_pr" ]; then
+            echo "::warning::Wrapper files are out of sync. Update PR #$open_pr is already open; merge it to fix this check."
+            exit 0
+          fi
+
+          git fetch origin main
+          git checkout -B "$branch" origin/main
+
+          python3 .github-tools/scripts/setup-consumer.py .
+
+          git add .github/
+          if [ -f CHANGELOG.md ]; then
+            git add CHANGELOG.md
+          fi
+
+          if git diff --cached --quiet; then
+            echo "::error::Validation failed but setup-consumer.py produced no changes. The scripts may be out of sync."
+            exit 1
+          fi
+
+          git commit -m "chore: sync github-tools wrapper files"
+          git push "https://x-access-token:${BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch" --force
+
+          {
+            echo "Wrapper files have drifted from the current version of github-tools."
+            echo "This PR was created automatically by the sync-check job in \`pr-check.yml\`."
+            echo
+            echo "**Validation output that triggered this PR:**"
+            echo '```'
+            cat /tmp/validate-output.txt
+            echo '```'
+            echo
+            echo "**What to do:** review and merge this PR. The sync check will pass once these wrapper files are merged into \`main\`."
+          } >/tmp/sync-pr-body.md
+
+          gh pr create \
+            --title "chore: sync github-tools wrapper files" \
+            --body-file /tmp/sync-pr-body.md \
+            --base main \
+            --head "$branch"
+
+          echo "::warning::Wrapper files are out of sync. An update PR has been created; merge it to fix this check."
+
+      - name: Fail if out of sync
+        if: steps.validate.outputs.in_sync == 'false'
+        run: exit 1

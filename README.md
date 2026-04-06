@@ -16,12 +16,14 @@ Call from a consuming repo's workflow with `uses: LikeTheSalad/github-tools/.git
 
 #### `pr-check.yml`
 
-Runs the project's verification suite, optionally on Windows, and optionally boots an Android
-emulator for instrumentation tests. The calling job (conventionally named `checks`) serves as the
-branch-protection status check — register it as the single required check.
+Runs an automatic wrapper sync check, the project's verification suite, optionally on Windows, and
+optionally boots an Android emulator for instrumentation tests. The calling job (conventionally
+named `checks`) serves as the branch-protection status check — register it as the single required
+check.
 
 | Input | Type | Default | Description |
 |-------|------|---------|-------------|
+| `app-id` | string | required | GitHub App ID used by the wrapper sync check |
 | `java-version` | string | `21` | JDK version |
 | `checks-command` | string | `./gradlew check` | Main verification command |
 | `run-on-windows` | boolean | `false` | Also run on `windows-latest` |
@@ -39,9 +41,38 @@ jobs:
   checks:
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
     with:
+      app-id: ${{ vars.APP_ID }}
       checks-command: ./checks.sh
       run-instrumentation-tests: true
       instrumentation-test-command: ./gradlew -p demo-app connectedDebugAndroidTest
+    secrets: inherit
+```
+
+---
+
+#### `sync-wrappers.yml`
+
+Validates that a consumer repo's generated github-tools wrapper files are in sync with this repo.
+If drift is found, it runs the setup script, pushes the changes to a bot-managed branch, opens a
+PR, and fails the workflow so the caller stays red until the update PR is merged.
+
+This workflow is intended to be called both from `pr-check.yml` and from a consumer-side manual
+wrapper that exposes `workflow_dispatch`.
+
+| Input | Type | Default | Description |
+|-------|------|---------|-------------|
+| `app-id` | string | required | GitHub App ID used to push the auto-update branch and open the PR |
+
+```yaml
+# .github/workflows/sync-wrappers.yml
+name: Sync github-tools wrappers
+on:
+  workflow_dispatch:
+jobs:
+  sync:
+    uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
+    with:
+      app-id: ${{ vars.APP_ID }}
     secrets: inherit
 ```
 

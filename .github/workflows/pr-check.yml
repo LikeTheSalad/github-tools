@@ -3,6 +3,10 @@ name: PR Check
 on:
   workflow_call:
     inputs:
+      app-id:
+        description: GitHub App ID for the bot account used by the wrapper sync check job
+        type: string
+        required: true
       java-version:
         description: JDK version to use
         type: string
@@ -29,6 +33,13 @@ on:
         default: 35
 
 jobs:
+  sync-check:
+    name: Wrapper sync check
+    uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
+    with:
+      app-id: ${{ inputs.app-id }}
+    secrets: inherit
+
   build:
     name: Gradle check
     strategy:

@@ -33,9 +33,10 @@ itself.
 │   ├── setup-bot-git-user/      # Composite: creates GitHub App token + configures git identity
 │   └── setup-java/              # Composite: installs Temurin JDK
 └── workflows/
-    ├── pr-check.yml             # Reusable: runs verification (+ optionally Windows, emulator)
+    ├── pr-check.yml             # Reusable: runs wrapper sync check + verification
     ├── release-prepare.yml      # Reusable: calculates version, creates branches, opens review PR
-    └── release-publish.yml      # Reusable: publishes artifacts, tags, creates GH release
+    ├── release-publish.yml      # Reusable: publishes artifacts, tags, creates GH release
+    └── sync-wrappers.yml        # Reusable: validates wrapper drift and opens auto-fix PRs
 ```
 
 ---
@@ -70,9 +71,10 @@ below for full details on what each script does and checks.
 
 ### `pr-check.yml`
 
-Two internal jobs: `build` (matrix: ubuntu + optionally windows) and `instrumentation` (Android
-emulator, only when `run-instrumentation-tests: true`). Both upload build reports as artifacts on
-failure.
+Three internal jobs: `sync-check`, `build` (matrix: ubuntu + optionally windows), and
+`instrumentation` (Android emulator, only when `run-instrumentation-tests: true`). The workflow
+now also has a required `app-id` input, passed through to `sync-check`, which calls
+`sync-wrappers.yml`. Both verification jobs upload build reports as artifacts on failure.
 
 When a consuming repo calls this workflow, the calling job (conventionally named `checks`) passes
 only if all internal jobs pass — this is how GitHub handles reusable workflow results. Branch
@@ -80,6 +82,14 @@ protection in consuming repos registers `checks`, not the internal job names.
 
 To add a new job to `pr-check.yml`: just add it. The consuming repo's `checks` job will
 automatically fail if the new job fails — no changes needed in consuming repos.
+
+### `sync-wrappers.yml`
+
+Single job `sync`: validates the consumer repo against the current reusable workflow schema using
+`scripts/validate-consumer.py`. If wrapper files have drifted, it runs `scripts/setup-consumer.py`,
+pushes the generated changes to the bot-managed branch `github-tools/auto-update`, opens or reuses
+a PR back to `main`, then fails the job so the caller's status check stays red until the wrapper
+update is merged.
 
 ### `release-prepare.yml`
 
@@ -227,7 +237,9 @@ confirm known consumers are still valid, and to guide the updates they need.
 
 1. Create `.github/workflows/<name>.yml` with `on: workflow_call:`.
 2. Document inputs/outputs.
-3. Update `README.md` — add a section under "Reusable workflows".
+3. Update `scripts/setup-consumer.py` — add entries in `WRAPPER_TEMPLATES` and
+   `CONVENTIONAL_INPUTS` if consumers should get a generated thin wrapper.
+4. Update `README.md` — add a section under "Reusable workflows".
 
 ## How to modify an existing workflow or action
 
@@ -237,6 +249,8 @@ confirm known consumers are still valid, and to guide the updates they need.
 - **Renaming or removing an input:** breaking change — same constraint.
 - **Adding a job to `pr-check.yml`:** safe; the consuming repo's `checks` caller job automatically
   reflects the failure without any changes in consuming repos.
+- **Adding a reusable workflow:** if consumers should wrap it, update `WRAPPER_TEMPLATES` and
+  `CONVENTIONAL_INPUTS` in `setup-consumer.py` before running the consumer setup script.
 
 After any input change, run `validate-consumer.py` against each known consuming repo.
 

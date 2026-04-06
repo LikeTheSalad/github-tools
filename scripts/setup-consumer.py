@@ -64,6 +64,15 @@ jobs:
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
 {with_section}    secrets: inherit
 """,
+    "sync-wrappers.yml": """\
+name: Sync github-tools wrappers
+on:
+  workflow_dispatch:
+jobs:
+  sync:
+    uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
+{with_section}    secrets: inherit
+""",
     "release-prepare.yml": """\
 name: Release — Prepare
 on:
@@ -101,12 +110,17 @@ jobs:
 # the template above). For existing files, they are only used as placeholders
 # for newly-required inputs the user has not configured yet.
 CONVENTIONAL_INPUTS: dict[str, dict[str, str]] = {
-    "pr-check.yml": {},
+    "pr-check.yml": {
+        "app-id": "${{ vars.APP_ID }}",
+    },
     "release-prepare.yml": {
         "app-id": "${{ vars.APP_ID }}",
         "version-override": "${{ inputs.version_override || '' }}",
     },
     "release-publish.yml": {
+        "app-id": "${{ vars.APP_ID }}",
+    },
+    "sync-wrappers.yml": {
         "app-id": "${{ vars.APP_ID }}",
     },
 }
