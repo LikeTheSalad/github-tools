@@ -5,7 +5,7 @@ setup-consumer.py — creates or updates a consumer repo's github-tools integrat
 What it automates
   • Thin-wrapper workflow files for every reusable workflow in this repo.
   • .github/renovate.json with auto-merge settings (merged, not replaced).
-  • CHANGELOG.md <!-- CHANGELOG_INSERT --> marker (if the file exists).
+  • CHANGELOG.md with <!-- CHANGELOG_INSERT --> marker (created if missing).
 
 Idempotent: safe to run repeatedly. Running it again on an already-configured
 repo is a no-op when nothing has changed.
@@ -132,29 +132,6 @@ def workflow_call_inputs(reusable_path: Path) -> dict:
     return wc.get("inputs") or {}
 
 
-def find_existing_wrapper(workflows_dir: Path, workflow_filename: str) -> Optional[Path]:
-    """
-    Returns the path of the consumer workflow file that already calls the given
-    reusable workflow (e.g. 'pr-check.yml'), or None if none exists.
-
-    Searches by `uses:` content rather than by filename so that files with a
-    .yaml extension (instead of .yml) are found correctly.
-    """
-    reusable_ref = f"{USES_PREFIX}{workflow_filename}@"
-    for wf_file in sorted(
-        list(workflows_dir.glob("*.yml")) + list(workflows_dir.glob("*.yaml"))
-    ):
-        try:
-            data = load_yaml(wf_file)
-        except yaml.YAMLError:
-            continue
-        for job in (data.get("jobs") or {}).values():
-            if isinstance(job, dict) and isinstance(job.get("uses"), str):
-                if job["uses"].startswith(reusable_ref):
-                    return wf_file
-    return None
-
-
 def extract_existing_with(wrapper_file: Path) -> Optional[dict]:
     """
     Returns the `with` block of the first github-tools job in the given file,
@@ -210,25 +187,16 @@ def compute_with_block(workflow_filename: str, existing_with: Optional[dict]) ->
 # ── YAML value formatting ─────────────────────────────────────────────────────
 
 def format_yaml_value(value: Any) -> str:
-    """Formats a Python value as a YAML scalar for use in block mappings."""
+    """Formats a Python value as a YAML scalar for use in block mappings.
+
+    Canonical style: booleans unquoted, numbers unquoted, all strings
+    single-quoted. Single quotes inside strings are escaped as ''.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
-    s = str(value)
-    if not s:
-        return "''"
-    # Characters that cannot begin a plain YAML scalar (per YAML 1.2 spec).
-    if s[0] in "#:[]{},|>&*!%@`'\"":
-        return "'" + s.replace("'", "''") + "'"
-    # If unquoted, YAML would re-parse this as a non-string type (e.g. "17" → int,
-    # "true" → bool), so quote to preserve string identity.
-    try:
-        if not isinstance(yaml.safe_load(s), str):
-            return "'" + s.replace("'", "''") + "'"
-    except yaml.YAMLError:
-        pass
-    return s
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def format_with_section(with_dict: dict) -> str:
@@ -253,26 +221,45 @@ def generate_wrapper(workflow_filename: str, existing_with: Optional[dict]) -> s
 def setup_workflow(
     workflow_filename: str, workflows_dir: Path, changes: List[str]
 ) -> None:
-    # Find the existing wrapper by its `uses:` reference, not by filename,
-    # so that files using a .yaml extension are detected correctly.
-    existing_file = find_existing_wrapper(workflows_dir, workflow_filename)
-    target = existing_file if existing_file else workflows_dir / workflow_filename
+    # Canonical target is always .yml. If only a .yaml file exists (legacy),
+    # read its `with` values, write the canonical .yml, then delete the .yaml.
+    target = workflows_dir / workflow_filename
+    legacy = workflows_dir / workflow_filename.replace(".yml", ".yaml")
     rel = target.relative_to(workflows_dir.parent.parent)
 
-    existing_with = extract_existing_with(target) if existing_file else None
+    if target.exists():
+        existing_with = extract_existing_with(target)
+        migrating = False
+    elif legacy.exists():
+        existing_with = extract_existing_with(legacy)
+        migrating = True
+    else:
+        existing_with = None
+        migrating = False
+
     new_content = generate_wrapper(workflow_filename, existing_with)
 
-    if existing_file:
-        if target.read_text() == new_content:
+    if target.exists() and target.read_text() == new_content:
+        if legacy.exists():
+            legacy.unlink()
+            legacy_rel = legacy.relative_to(workflows_dir.parent.parent)
+            msg = f"[DELETE]  {legacy_rel} — replaced by {rel}"
+            print(msg)
+            changes.append(msg)
+        else:
             print(f"[OK]     {rel}")
-            return
+        return
 
-        # Describe what changed in the `with` block
-        old_keys = set(existing_with or {})
+    target.write_text(new_content)
+
+    if migrating:
+        legacy.unlink()
+        msg = f"[MIGRATE] {legacy.name} → {rel}"
+    elif existing_with is not None:
+        old_keys = set(existing_with)
         new_keys = set(compute_with_block(workflow_filename, existing_with))
         added = sorted(new_keys - old_keys)
         removed = sorted(old_keys - new_keys)
-
         if added or removed:
             parts = []
             if added:
@@ -282,11 +269,8 @@ def setup_workflow(
             detail = "; ".join(parts)
         else:
             detail = "reformatted"
-
-        target.write_text(new_content)
         msg = f"[UPDATE] {rel} — {detail}"
     else:
-        target.write_text(new_content)
         msg = f"[CREATE] {rel}"
 
     print(msg)
@@ -345,8 +329,12 @@ CHANGELOG_MARKER = "<!-- CHANGELOG_INSERT -->"
 
 def setup_changelog(consumer_root: Path, changes: List[str]) -> None:
     target = consumer_root / "CHANGELOG.md"
+
     if not target.exists():
-        print("[SKIP]   CHANGELOG.md — not found; create it and re-run to add the insert marker")
+        target.write_text("Change Log\n==========\n\n" + CHANGELOG_MARKER + "\n")
+        msg = "[CREATE] CHANGELOG.md"
+        print(msg)
+        changes.append(msg)
         return
 
     content = target.read_text()

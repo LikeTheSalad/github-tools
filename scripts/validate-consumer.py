@@ -227,16 +227,29 @@ def main():
     expected_workflows: set[str] = {p.name for p in REUSABLE_WORKFLOWS_DIR.glob("*.yml")}
 
     result = Result()
-    referenced_workflows: set[str] = set()
+    # Map each reusable workflow filename to the consumer files that call it.
+    reusable_to_files: dict[str, list[Path]] = {}
 
     for wf_file in wf_files:
-        referenced_workflows |= validate_file(wf_file, result)
+        for ref in validate_file(wf_file, result):
+            reusable_to_files.setdefault(ref, []).append(wf_file)
 
+    referenced_workflows = set(reusable_to_files)
     checked = len(referenced_workflows)
 
     if checked == 0:
         print(f"No github-tools workflows found in '{workflows_dir}'.")
         sys.exit(0)
+
+    # ── Each reusable workflow must be wrapped by exactly one file ────────────
+    for reusable_wf, files in sorted(reusable_to_files.items()):
+        if len(files) > 1:
+            names = ", ".join(f.name for f in files)
+            result.error(
+                consumer_root.name,
+                f"'{reusable_wf}' is called from multiple files ({names})"
+                f" — only one wrapper per reusable workflow is allowed",
+            )
 
     # ── Every expected workflow must be referenced somewhere ─────────────────
     for missing in sorted(expected_workflows - referenced_workflows):
