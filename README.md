@@ -2,6 +2,9 @@
 
 Shared GitHub Actions reusable workflows and composite actions for Gradle/Android projects.
 
+> **Personal use only.** This repo is built for my own projects and is not intended for general use.
+> There are no releases, no stability guarantees, and no support for external consumers.
+
 ---
 
 ## Usage
