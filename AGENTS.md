@@ -135,6 +135,31 @@ Tags are always `v{major}.{minor}.{patch}`. The version scripts grep for
 
 ---
 
+## Validating consumer repos
+
+`scripts/validate-consumer.py` checks that a consumer repo's thin-wrapper workflows are correct.
+It derives the expected input schema directly from the reusable workflow files in this repo, so it
+stays accurate automatically as inputs change.
+
+```
+python3 scripts/validate-consumer.py <path-to-consumer-repo>
+```
+
+What it checks:
+- `uses:` path references an existing workflow in this repo and is pinned to `@main`
+- All required inputs (those marked `required: true` with no `default`) are present
+- No inputs are passed that aren't defined in the reusable workflow
+- Boolean/number inputs have the right YAML type (unquoted), unless the value is a `${{ }}` expression
+- `secrets: inherit` is present on every github-tools job
+
+It warns (without failing) if a `pr-check` caller job is not named `checks`, since branch
+protection in consuming repos is registered against that name.
+
+**Run this after any input change** (add, rename, remove, change required/optional status) to
+confirm known consumers are still valid, and to guide the updates they need.
+
+---
+
 ## How to add a new composite action
 
 1. Create `.github/actions/<name>/action.yml`.
@@ -156,6 +181,8 @@ Tags are always `v{major}.{minor}.{patch}`. The version scripts grep for
 - **Renaming or removing an input:** breaking change — same constraint.
 - **Adding a job to `pr-check.yml`:** safe; the consuming repo's `checks` caller job automatically
   reflects the failure without any changes in consuming repos.
+
+After any input change, run `validate-consumer.py` against each known consuming repo.
 
 ---
 
