@@ -17,6 +17,10 @@ Consumer wrappers map only the secrets each reusable workflow needs; they do not
 
 Call from a consuming repo's workflow with `uses: LikeTheSalad/github-tools/.github/workflows/<name>@main`.
 
+Wrapper files can be regenerated with `python3 scripts/setup-consumer.py <path-to-consumer-repo>`.
+The script derives required inputs and explicit secret mappings directly from the reusable workflow
+schema in this repo, so input/secret changes in existing workflows do not require script updates.
+
 #### `pr-check.yml`
 
 Runs an automatic wrapper sync check, the project's verification suite, optionally on Windows, and

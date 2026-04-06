@@ -59,8 +59,9 @@ consumer repo setup or validation.
 3. Run `validate-consumer.py` again to confirm everything passes.
 
 Both scripts derive the expected input schema directly from the reusable workflow
-files in `.github/workflows/`, so they stay accurate automatically as inputs
-change — no separate schema file to maintain.
+files in `.github/workflows/`, and they also derive the reusable workflows'
+declared `on.workflow_call.secrets` directly. That keeps them accurate
+automatically as inputs or secrets change — no separate schema file to maintain.
 
 See the "Setting up a new consumer repo" and "Validating consumer repos" sections
 below for full details on what each script does and checks.
@@ -189,6 +190,8 @@ inputs change in this repo, re-running the script on a consumer:
 - Adds newly-required inputs (with conventional value or `<TODO: set …>` placeholder)
 - Removes inputs deleted from the schema
 - Preserves all existing user-configured input values unchanged
+- Regenerates explicit `secrets:` mappings directly from each reusable workflow's
+  declared `on.workflow_call.secrets`
 - Normalizes file structure to the current template on first run; subsequent runs are no-ops
 
 After the script runs, run `validate-consumer.py` to confirm the result.
@@ -198,6 +201,7 @@ The script prints a "Manual steps required" notice at the end covering things it
 
 **If the wrapper trigger conventions change** (e.g. the `on:` block in `WRAPPER_TEMPLATES` or the
 job name for a workflow), update the `WRAPPER_TEMPLATES` dict in `setup-consumer.py` and this file.
+Input and secret additions/removals in existing reusable workflows do not require script changes.
 
 ---
 
@@ -241,6 +245,7 @@ confirm known consumers are still valid, and to guide the updates they need.
 2. Document inputs/outputs.
 3. Update `scripts/setup-consumer.py` — add entries in `WRAPPER_TEMPLATES` and
    `CONVENTIONAL_INPUTS` if consumers should get a generated thin wrapper.
+   Secret mappings are derived automatically from `on.workflow_call.secrets`.
 4. Update `README.md` — add a section under "Reusable workflows".
 
 ## How to modify an existing workflow or action
@@ -248,6 +253,9 @@ confirm known consumers are still valid, and to guide the updates they need.
 - **Adding an input with a default:** safe; consuming repos that don't pass it get the default.
 - **Adding a required input (no default):** breaking change — all consuming repos must be updated
   before or at the same time as this repo, since they pin to `@main`.
+- **Adding, removing, or changing workflow secrets:** safe from a script-maintenance perspective;
+  `setup-consumer.py` and `validate-consumer.py` derive them directly from the reusable workflow
+  schema. Consumers still need their generated wrappers refreshed.
 - **Renaming or removing an input:** breaking change — same constraint.
 - **Adding a job to `pr-check.yml`:** safe; the consuming repo's `checks` caller job automatically
   reflects the failure without any changes in consuming repos.
