@@ -60,9 +60,20 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
-  checks:
+  pr_check:
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
 {with_section}{secrets_section}
+  checks:
+    name: checks
+    if: ${{{{ always() }}}}
+    needs: pr_check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Finalize check status
+        env:
+          RESULT: ${{{{ needs.pr_check.result }}}}
+        run: |
+          test "$RESULT" = "success"
 """,
     "sync-wrappers.yml": """\
 name: Sync github-tools wrappers
@@ -244,6 +255,7 @@ def compute_secrets_blocks(
 ) -> tuple[dict, list[tuple[str, str]]]:
     reusable_path = REUSABLE_WORKFLOWS_DIR / workflow_filename
     schema = workflow_call_secrets(reusable_path)
+    is_new = existing_secrets is None
     existing_secrets = existing_secrets or {}
 
     active = {}
@@ -264,7 +276,7 @@ def compute_secrets_blocks(
             active[secret_name] = default_secret_mapping(secret_name)
         elif secret_name in active_optional:
             active[secret_name] = default_secret_mapping(secret_name)
-        else:
+        elif is_new:
             commented.append((secret_name, default_secret_mapping(secret_name)))
 
     return active, commented

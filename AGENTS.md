@@ -77,9 +77,10 @@ Three internal jobs: `sync-check`, `build` (matrix: ubuntu + optionally windows)
 now also has a required `app-id` input, passed through to `sync-check`, which calls
 `sync-wrappers.yml`. Both verification jobs upload build reports as artifacts on failure.
 
-When a consuming repo calls this workflow, the calling job (conventionally named `checks`) passes
-only if all internal jobs pass — this is how GitHub handles reusable workflow results. Branch
-protection in consuming repos registers `checks`, not the internal job names.
+Consumer wrappers should call this reusable workflow from a separate job (for example `pr_check`)
+and then expose a final local job named `checks` that depends on it. Branch protection in
+consuming repos should register that final local `checks` job, not the reusable workflow's
+internal job names or the reusable-workflow caller job.
 
 To add a new job to `pr-check.yml`: just add it. The consuming repo's `checks` job will
 automatically fail if the new job fails — no changes needed in consuming repos.
@@ -226,8 +227,8 @@ What it checks:
 - Boolean/number inputs have the right YAML type (unquoted), unless the value is a `${{ }}` expression
 - `secrets: inherit` is not used on github-tools jobs; wrappers must map secrets explicitly
 
-It warns (without failing) if a `pr-check` caller job is not named `checks`, since branch
-protection in consuming repos is registered against that name.
+It warns (without failing) if a `pr-check` wrapper file is missing the final local `checks` job
+that branch protection should target.
 
 **Run this after any input change** (add, rename, remove, change required/optional status) to
 confirm known consumers are still valid, and to guide the updates they need.

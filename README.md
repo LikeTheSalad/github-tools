@@ -25,9 +25,9 @@ Optional secrets may be emitted as commented-out suggestions in generated wrappe
 #### `pr-check.yml`
 
 Runs an automatic wrapper sync check, the project's verification suite, optionally on Windows, and
-optionally boots an Android emulator for instrumentation tests. The calling job (conventionally
-named `checks`) serves as the branch-protection status check — register it as the single required
-check.
+optionally boots an Android emulator for instrumentation tests. Consumer wrappers should expose a
+final local job named `checks` that depends on the reusable workflow call; register that final
+`checks` job as the single required branch-protection check.
 
 | Input | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -46,7 +46,7 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
-  checks:
+  pr_check:
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
     with:
       app-id: ${{ vars.APP_ID }}
@@ -55,6 +55,16 @@ jobs:
       instrumentation-test-command: ./gradlew -p demo-app connectedDebugAndroidTest
     secrets:
       GH_BOT_PRIVATE_KEY: ${{ secrets.GH_BOT_PRIVATE_KEY }}
+  checks:
+    name: checks
+    if: ${{ always() }}
+    needs: pr_check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Finalize check status
+        env:
+          RESULT: ${{ needs.pr_check.result }}
+        run: test "$RESULT" = "success"
 ```
 
 ---

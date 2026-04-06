@@ -39,6 +39,9 @@ on:
 jobs:
   sync-check:
     name: Wrapper sync check
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
     with:
       app-id: ${{ inputs.app-id }}

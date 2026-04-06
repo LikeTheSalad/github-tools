@@ -182,14 +182,6 @@ def validate_job(
                 f"Input '{name}' expects number, got {type(value).__name__} ({value!r})",
             )
 
-    # ── Convention: pr-check caller job should be named 'checks' ────────────
-    if workflow_filename in ("pr-check.yml", "pr-check.yaml") and job_name != "checks":
-        result.warning(
-            ctx,
-            f"Job is named '{job_name}'; branch-protection convention expects 'checks'",
-        )
-
-
 def validate_file(wf_file: Path, result: Result) -> set[str]:
     """
     Validates one consumer workflow file.
@@ -212,6 +204,19 @@ def validate_file(wf_file: Path, result: Result) -> set[str]:
     for job_name, job, workflow_filename in jobs:
         validate_job(wf_file.name, job_name, job, workflow_filename, result)
         referenced.add(workflow_filename)
+
+    if "pr-check.yml" in referenced:
+        checks_job = (data.get("jobs") or {}).get("checks")
+        if not isinstance(checks_job, dict):
+            result.warning(
+                wf_file.name,
+                "Missing local job 'checks'; branch protection should target a final local checks job",
+            )
+        elif checks_job.get("uses") is not None:
+            result.warning(
+                wf_file.name,
+                "Job 'checks' should be a local aggregator job, not the reusable workflow caller",
+            )
 
     return referenced
 
