@@ -40,6 +40,32 @@ itself.
 
 ---
 
+## Scripts
+
+Two Python scripts live in `scripts/`. Use them whenever a task involves
+consumer repo setup or validation.
+
+**Prerequisite:** PyYAML must be installed — run `pip install pyyaml` if needed.
+
+| Script | When to use |
+|--------|-------------|
+| `python3 scripts/validate-consumer.py <path>` | Check that a consumer repo's wrapper files are correct and up to date with this repo's current inputs |
+| `python3 scripts/setup-consumer.py <path>` | Create or update a consumer repo's wrapper files, `renovate.json`, and `CHANGELOG.md` marker |
+
+**Typical workflow** when asked to set up or fix a consumer repo:
+1. Run `validate-consumer.py` first to see what (if anything) is wrong.
+2. Run `setup-consumer.py` to apply fixes.
+3. Run `validate-consumer.py` again to confirm everything passes.
+
+Both scripts derive the expected input schema directly from the reusable workflow
+files in `.github/workflows/`, so they stay accurate automatically as inputs
+change — no separate schema file to maintain.
+
+See the "Setting up a new consumer repo" and "Validating consumer repos" sections
+below for full details on what each script does and checks.
+
+---
+
 ## How each component works
 
 ### `pr-check.yml`
