@@ -33,6 +33,13 @@ USES_PREFIX = f"{OWNER_REPO}/.github/workflows/"
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 REUSABLE_WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
+REQUIRED_CALLER_WRITE_PERMISSIONS = {
+    "pr-check.yml": ("contents", "pull-requests"),
+    "release-prepare.yml": ("contents", "pull-requests"),
+    "release-publish.yml": ("contents", "pull-requests"),
+    "sync-wrappers.yml": ("contents", "pull-requests"),
+}
+
 
 # ---------------------------------------------------------------------------
 # YAML helpers
@@ -182,6 +189,17 @@ def validate_job(
                 f"Input '{name}' expects number, got {type(value).__name__} ({value!r})",
             )
 
+    required_permissions = REQUIRED_CALLER_WRITE_PERMISSIONS.get(workflow_filename, ())
+    if required_permissions:
+        perms = job.get("permissions") or {}
+        missing = [p for p in required_permissions if perms.get(p) != "write"]
+        if missing:
+            result.error(
+                ctx,
+                "Missing caller permission(s): "
+                + ", ".join(f"{p}: write" for p in missing),
+            )
+
 def validate_file(wf_file: Path, result: Result) -> set[str]:
     """
     Validates one consumer workflow file.
@@ -208,12 +226,12 @@ def validate_file(wf_file: Path, result: Result) -> set[str]:
     if "pr-check.yml" in referenced:
         checks_job = (data.get("jobs") or {}).get("checks")
         if not isinstance(checks_job, dict):
-            result.warning(
+            result.error(
                 wf_file.name,
                 "Missing local job 'checks'; branch protection should target a final local checks job",
             )
         elif checks_job.get("uses") is not None:
-            result.warning(
+            result.error(
                 wf_file.name,
                 "Job 'checks' should be a local aggregator job, not the reusable workflow caller",
             )

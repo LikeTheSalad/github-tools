@@ -61,6 +61,9 @@ on:
   workflow_dispatch:
 jobs:
   pr_check:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
 {with_section}{secrets_section}
   checks:
@@ -81,6 +84,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
 {with_section}{secrets_section}
 """,
@@ -98,6 +104,9 @@ on:
         default: ''
 jobs:
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/release-prepare.yml@main
 {with_section}{secrets_section}
 """,
@@ -110,6 +119,9 @@ on:
       - 'release/**'
 jobs:
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/release-publish.yml@main
 {with_section}{secrets_section}
 """,

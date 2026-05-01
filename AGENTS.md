@@ -226,9 +226,8 @@ What it checks:
 - No secrets are mapped that aren't defined in the reusable workflow
 - Boolean/number inputs have the right YAML type (unquoted), unless the value is a `${{ }}` expression
 - `secrets: inherit` is not used on github-tools jobs; wrappers must map secrets explicitly
-
-It warns (without failing) if a `pr-check` wrapper file is missing the final local `checks` job
-that branch protection should target.
+- github-tools caller jobs that need write access have `permissions: contents: write, pull-requests: write`
+- A local `checks` aggregator job exists and is not itself a reusable workflow caller
 
 **Run this after any input change** (add, rename, remove, change required/optional status) to
 confirm known consumers are still valid, and to guide the updates they need.

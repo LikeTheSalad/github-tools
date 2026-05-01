@@ -47,6 +47,9 @@ on:
   workflow_dispatch:
 jobs:
   pr_check:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/pr-check.yml@main
     with:
       app-id: ${{ vars.APP_ID }}
@@ -89,6 +92,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/sync-wrappers.yml@main
     with:
       app-id: ${{ vars.APP_ID }}
@@ -133,6 +139,9 @@ on:
         default: ''
 jobs:
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/release-prepare.yml@main
     with:
       app-id: ${{ vars.APP_ID }}
@@ -170,6 +179,9 @@ on:
       - 'release/**'
 jobs:
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: LikeTheSalad/github-tools/.github/workflows/release-publish.yml@main
     with:
       app-id: ${{ vars.APP_ID }}
