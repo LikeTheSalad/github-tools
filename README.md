@@ -129,7 +129,7 @@ manually with an optional version override.
 name: Release — Prepare
 on:
   schedule:
-    - cron: '0 12 1 * *'
+    - cron: '0 0 1 * *'
   workflow_dispatch:
     inputs:
       version_override:
